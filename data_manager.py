@@ -167,8 +167,7 @@ def decoder_pic_path(mode,fname):
 
 class VCM(object):
     # modify the data path here according to yours
-    root = '/root/autodl-tmp/VCM-HITSZ/'
-    #root = '/mnt/sda1/xyt/datasets/HITSZ-VCM/'
+    root = '/mnt/sda1/xyt/datasets/HITSZ-VCM/'
     # training data
     train_name_path = osp.join(root,'info/train_name.txt')
     track_train_info_path = osp.join(root,'info/track_train_info.txt')

@@ -459,7 +459,7 @@ class TTQK(nn.Module):
         self.base = base
         self.use_backbone = use_backbone
 
-        #prepare this weight file to the right path
+        # prepare this weight file to the right path
         PRETRAIN_PATH = "./jx_vit_base_p16_224-80ecf9dd.pth"
         # this setting is flowing PMT
         transformer = ViT(img_size=[256,128] if use_backbone == False else [288,144],

@@ -118,6 +118,7 @@ class CosineLRScheduler(Scheduler):
 
     def __init__(self,
                  optimizer: torch.optim.Optimizer,
+                 stage : int,
                  t_initial: int,
                  t_mul: float = 1.,
                  lr_min: float = 0.,
@@ -151,6 +152,7 @@ class CosineLRScheduler(Scheduler):
         self.warmup_lr_init = warmup_lr_init
         self.warmup_prefix = warmup_prefix
         self.t_in_epochs = t_in_epochs
+        self.stage = stage
         if self.warmup_t:
             self.warmup_steps = [(v - warmup_lr_init) / self.warmup_t for v in self.base_values]
             super().update_groups(self.warmup_lr_init)
@@ -182,7 +184,10 @@ class CosineLRScheduler(Scheduler):
                     lr_min + 0.5 * (lr_max - lr_min) * (1 + math.cos(math.pi * t_curr / t_i)) for lr_max in lr_max_values
                 ]
             else:
-                lrs = [self.lr_min for _ in self.base_values]
+                if self.stage == 4:
+                    lrs = [self.lr_min * 0.1 for _ in self.base_values]
+                else:
+                    lrs = [self.lr_min for _ in self.base_values]
 
         return lrs
 
@@ -208,12 +213,22 @@ class CosineLRScheduler(Scheduler):
             return int(math.floor(-self.t_initial * (self.t_mul ** cycles - 1) / (1 - self.t_mul)))
 
 
-def create_scheduler(optimizer):
-
-    num_epochs = 30
-    lr_min = 0.01 * 3e-4
-    warmup_lr_init = 0.01 * 3e-4
-    warmup_t = 3
+def create_scheduler(optimizer,stage):
+    warmup_t= 3
+    lr_min = 0.01 * 5e-4
+    if stage == 1:
+        warmup_lr_init = 0.1 * 5e-4
+        num_epochs = 15
+    elif stage == 2:
+        warmup_lr_init = 0.01 * 5e-4
+        num_epochs = 30
+    elif stage == 3:
+        warmup_lr_init = 0.01 * 5e-4
+        num_epochs = 30
+    else:
+        warmup_t = 7
+        warmup_lr_init = 0.01 * 5e-4
+        num_epochs = 20
 
     lr_scheduler = CosineLRScheduler(
             optimizer,

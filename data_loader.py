@@ -206,7 +206,7 @@ class VideoDataset_train(data.Dataset):
     """
     sample_methods = ['evenly', 'random', 'all']
 
-    def __init__(self, dataset_ir,dataset_rgb, seq_len=12, sample='evenly', transform=None,index1 = [],index2 = []):
+    def __init__(self, dataset_ir,dataset_rgb, seq_len=12, sample='evenly', transform=None,index1 = [],index2 = [],isRandom = True):
         self.dataset_ir = dataset_ir
         self.dataset_rgb = dataset_rgb
         self.seq_len = seq_len
@@ -214,6 +214,11 @@ class VideoDataset_train(data.Dataset):
         self.transform = transform
         self.cIndex = index1
         self.tIndex = index2
+        self.isRandom = isRandom
+
+        # Preselect one random image index for each tracklet
+        self.imgIndex_ir = [np.random.choice(len(dataset_ir[i][0])) for i in range(self.dataset_ir)]
+        self.imgIndex_rgb = [np.random.choice(len(dataset_rgb[i][0])) for i in range(self.dataset_rgb)]
 
     def __len__(self):
         if self.cIndex is not None:
@@ -222,141 +227,156 @@ class VideoDataset_train(data.Dataset):
             return len(self.dataset_rgb)
 
     def __getitem__(self, index):
+        if not self.isRandom:  # 每次从tracklet中抽取的图片固定
+            img_ir_paths, pid_ir, camid_ir = self.dataset_ir[self.tIndex[index]]
+            img_ir_path = img_ir_paths[self.imgIndex_ir[self.tIndex[index]]]
 
-        img_ir_paths, pid_ir, camid_ir = self.dataset_ir[self.tIndex[index]]
+            img_rgb_paths, pid_rgb, camid_rgb = self.dataset_rgb[self.cIndex[index]]
+            img_rgb_path = img_rgb_paths[self.imgIndex_rgb[self.cIndex[index]]]
 
-        num_ir = len(img_ir_paths)
+            img_ir = read_image(img_ir_path)
+            img_ir = np.array(img_ir)
+            if self.transform is not None:
+                img_ir = self.transform(img_ir)
 
-        img_rgb_paths,pid_rgb,camid_rgb = self.dataset_rgb[self.cIndex[index]]
-        num_rgb = len(img_rgb_paths)
+            img_rgb = read_image(img_rgb_path)
+            img_rgb = np.array(img_rgb)
+            if self.transform is not None:
+                img_rgb = self.transform(img_rgb)
+            return img_rgb, img_ir, pid_rgb, pid_ir
+        else:  # 每次从tracklet中抽取的图片随机
+            img_ir_paths, pid_ir, camid_ir = self.dataset_ir[self.tIndex[index]]
 
-        S = self.seq_len
-        sample_clip_ir = []
-        frame_indices_ir = list(range(num_ir))
-        if num_ir < S: 
-            strip_ir = list(range(num_ir)) + [frame_indices_ir[-1]] * (S - num_ir)
-            for s in range(S):
-                pool_ir = strip_ir[s * 1:(s + 1) * 1]
-                sample_clip_ir.append(list(pool_ir))
-        else:
-            inter_val_ir = math.ceil(num_ir / S)
-            strip_ir = list(range(num_ir)) + [frame_indices_ir[-1]] * (inter_val_ir * S - num_ir)
-            for s in range(S):
-                pool_ir = strip_ir[inter_val_ir * s:inter_val_ir * (s + 1)]
-                sample_clip_ir.append(list(pool_ir))
+            num_ir = len(img_ir_paths)
 
-        sample_clip_ir = np.array(sample_clip_ir)
+            img_rgb_paths, pid_rgb, camid_rgb = self.dataset_rgb[self.cIndex[index]]
+            num_rgb = len(img_rgb_paths)
 
-        sample_clip_rgb = []
-        frame_indices_rgb = list(range(num_rgb))
-        if num_rgb < S: 
-            strip_rgb = list(range(num_rgb)) + [frame_indices_rgb[-1]] * (S - num_rgb)
-            for s in range(S):
-                pool_rgb = strip_rgb[s * 1:(s + 1) * 1]
-                sample_clip_rgb.append(list(pool_rgb))
-        else:
-            inter_val_rgb = math.ceil(num_rgb / S)
-            strip_rgb = list(range(num_rgb)) + [frame_indices_rgb[-1]] * (inter_val_rgb * S - num_rgb)
-            for s in range(S):
-                pool_rgb = strip_rgb[inter_val_rgb * s:inter_val_rgb * (s + 1)]
-                sample_clip_rgb.append(list(pool_rgb))
+            S = self.seq_len
+            sample_clip_ir = []
+            frame_indices_ir = list(range(num_ir))
+            if num_ir < S:
+                strip_ir = list(range(num_ir)) + [frame_indices_ir[-1]] * (S - num_ir)
+                for s in range(S):
+                    pool_ir = strip_ir[s * 1:(s + 1) * 1]
+                    sample_clip_ir.append(list(pool_ir))
+            else:
+                inter_val_ir = math.ceil(num_ir / S)
+                strip_ir = list(range(num_ir)) + [frame_indices_ir[-1]] * (inter_val_ir * S - num_ir)
+                for s in range(S):
+                    pool_ir = strip_ir[inter_val_ir * s:inter_val_ir * (s + 1)]
+                    sample_clip_ir.append(list(pool_ir))
 
-        sample_clip_rgb = np.array(sample_clip_rgb)
+            sample_clip_ir = np.array(sample_clip_ir)
 
+            sample_clip_rgb = []
+            frame_indices_rgb = list(range(num_rgb))
+            if num_rgb < S:
+                strip_rgb = list(range(num_rgb)) + [frame_indices_rgb[-1]] * (S - num_rgb)
+                for s in range(S):
+                    pool_rgb = strip_rgb[s * 1:(s + 1) * 1]
+                    sample_clip_rgb.append(list(pool_rgb))
+            else:
+                inter_val_rgb = math.ceil(num_rgb / S)
+                strip_rgb = list(range(num_rgb)) + [frame_indices_rgb[-1]] * (inter_val_rgb * S - num_rgb)
+                for s in range(S):
+                    pool_rgb = strip_rgb[inter_val_rgb * s:inter_val_rgb * (s + 1)]
+                    sample_clip_rgb.append(list(pool_rgb))
 
-        if self.sample == 'random':
-            """
-            Randomly sample seq_len consecutive frames from num frames,
-            if num is smaller than seq_len, then replicate items.
-            This sampling strategy is used in training phase.
-            """
-            frame_indices = range(num_ir)
-            rand_end = max(0, len(frame_indices) - self.seq_len - 1)
-            begin_index = random.randint(0, rand_end)
-            end_index = min(begin_index + self.seq_len, len(frame_indices))
+            sample_clip_rgb = np.array(sample_clip_rgb)
 
-            indices = frame_indices[begin_index:end_index]
-            indices = list(indices)
-            for index in indices:
-                if len(indices) >= self.seq_len:
-                    break
-                indices.append(index)
-            indices=np.array(indices)
-            imgs_ir = []
-            for index in indices:
-                index=int(index)
-                img_path = img_ir_paths[index]
-                img = read_image(img_path)
+            if self.sample == 'random':
+                """
+                Randomly sample seq_len consecutive frames from num frames,
+                if num is smaller than seq_len, then replicate items.
+                This sampling strategy is used in training phase.
+                """
+                frame_indices = range(num_ir)
+                rand_end = max(0, len(frame_indices) - self.seq_len - 1)
+                begin_index = random.randint(0, rand_end)
+                end_index = min(begin_index + self.seq_len, len(frame_indices))
 
-                img = np.array(img)
-                if self.transform is not None:  
-                    img = self.transform(img)
+                indices = frame_indices[begin_index:end_index]
+                indices = list(indices)
+                for index in indices:
+                    if len(indices) >= self.seq_len:
+                        break
+                    indices.append(index)
+                indices = np.array(indices)
+                imgs_ir = []
+                for index in indices:
+                    index = int(index)
+                    img_path = img_ir_paths[index]
+                    img = read_image(img_path)
 
-                imgs_ir.append(img)
-            imgs_ir = torch.cat(imgs_ir, dim=0)
+                    img = np.array(img)
+                    if self.transform is not None:
+                        img = self.transform(img)
 
+                    imgs_ir.append(img)
+                imgs_ir = torch.cat(imgs_ir, dim=0)
 
-            frame_indices = range(num_rgb)
-            rand_end = max(0, len(frame_indices) - self.seq_len - 1)
-            begin_index = random.randint(0, rand_end)
-            end_index = min(begin_index + self.seq_len, len(frame_indices))
+                frame_indices = range(num_rgb)
+                rand_end = max(0, len(frame_indices) - self.seq_len - 1)
+                begin_index = random.randint(0, rand_end)
+                end_index = min(begin_index + self.seq_len, len(frame_indices))
 
-            indices = frame_indices[begin_index:end_index]
+                indices = frame_indices[begin_index:end_index]
 
-            indices = list(indices)
-            for index in indices:
-                if len(indices) >= self.seq_len:
-                    break
+                indices = list(indices)
+                for index in indices:
+                    if len(indices) >= self.seq_len:
+                        break
 
-                indices.append(index)
-            indices=np.array(indices)
-            imgs_rgb = []
-            for index in indices:
-                index=int(index)
-                img_path = img_rgb_paths[index]
-                img = read_image(img_path)
+                    indices.append(index)
+                indices = np.array(indices)
+                imgs_rgb = []
+                for index in indices:
+                    index = int(index)
+                    img_path = img_rgb_paths[index]
+                    img = read_image(img_path)
 
-                img = np.array(img)
-                if self.transform is not None:
-                    img = self.transform(img)
+                    img = np.array(img)
+                    if self.transform is not None:
+                        img = self.transform(img)
 
-                imgs_rgb.append(img)
-            imgs_rgb = torch.cat(imgs_rgb, dim=0)
-            return imgs_ir, pid_ir, camid_ir, imgs_rgb, pid_rgb, camid_rgb
-        elif self.sample == 'video_train':
-            idx1 = np.random.choice(sample_clip_ir.shape[1], sample_clip_ir.shape[0])
-            number_ir = sample_clip_ir[np.arange(len(sample_clip_ir)), idx1]
+                    imgs_rgb.append(img)
+                imgs_rgb = torch.cat(imgs_rgb, dim=0)
+                return imgs_ir, pid_ir, camid_ir, imgs_rgb, pid_rgb, camid_rgb
+            elif self.sample == 'video_train':
+                idx1 = np.random.choice(sample_clip_ir.shape[1], sample_clip_ir.shape[0])
+                number_ir = sample_clip_ir[np.arange(len(sample_clip_ir)), idx1]
 
-            imgs_ir = []
-            for index in number_ir:
-                index = int(index)
-                img_path = img_ir_paths[index]
-                img = read_image(img_path)
+                imgs_ir = []
+                for index in number_ir:
+                    index = int(index)
+                    img_path = img_ir_paths[index]
+                    img = read_image(img_path)
 
-                img = np.array(img)
-                if self.transform is not None: 
-                    img = self.transform(img)
+                    img = np.array(img)
+                    if self.transform is not None:
+                        img = self.transform(img)
 
-                imgs_ir.append(img)
-            imgs_ir = torch.cat(imgs_ir, dim=0)
+                    imgs_ir.append(img)
+                imgs_ir = torch.cat(imgs_ir, dim=0)
 
-            idx2 = np.random.choice(sample_clip_rgb.shape[1], sample_clip_rgb.shape[0])
-            number_rgb = sample_clip_rgb[np.arange(len(sample_clip_rgb)), idx2]
-            imgs_rgb = []
-            for index in number_rgb:
-                index = int(index)
-                img_path = img_rgb_paths[index]
-                img = read_image(img_path)
+                idx2 = np.random.choice(sample_clip_rgb.shape[1], sample_clip_rgb.shape[0])
+                number_rgb = sample_clip_rgb[np.arange(len(sample_clip_rgb)), idx2]
+                imgs_rgb = []
+                for index in number_rgb:
+                    index = int(index)
+                    img_path = img_rgb_paths[index]
+                    img = read_image(img_path)
 
-                img = np.array(img)
-                if self.transform is not None:
-                    img = self.transform(img)
+                    img = np.array(img)
+                    if self.transform is not None:
+                        img = self.transform(img)
 
-                imgs_rgb.append(img)
-            imgs_rgb = torch.cat(imgs_rgb, dim=0)
-            return imgs_rgb,imgs_ir,pid_rgb,pid_ir
-        else:
-            raise KeyError("Unknown sample method: {}. Expected one of {}".format(self.sample, self.sample_methods))
+                    imgs_rgb.append(img)
+                imgs_rgb = torch.cat(imgs_rgb, dim=0)
+                return imgs_rgb, imgs_ir, pid_rgb, pid_ir
+            else:
+                raise KeyError("Unknown sample method: {}. Expected one of {}".format(self.sample, self.sample_methods))
 
 class VideoDataset_test(data.Dataset):
     """Video Person ReID Dataset.

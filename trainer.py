@@ -14,7 +14,6 @@ class Trainer(object):
         self.model = model
         self.criterion_ce = nn.CrossEntropyLoss().cuda()
         self.criterion_triple = TripletLoss_WRT().cuda()
-        self.nel = NEL("consine_similarity").cuda()
         self.T = 2
 
     def train(self, epoch, data_loader_train, data_loader_replay, optimizer, training_phase,
@@ -28,7 +27,6 @@ class Trainer(object):
         id_loss = AverageMeter()
         tp_loss = AverageMeter()
         kl_loss = AverageMeter()
-        losses_neutral = AverageMeter()
         id_loss_specific = AverageMeter()
         goal_loss = AverageMeter()
         losses_total = AverageMeter()
@@ -66,7 +64,7 @@ class Trainer(object):
 
             lamba = sum(self.model.class_per_task[:-1]) / sum(self.model.class_per_task)
 
-            loss_total =  (1-lamba) * loss_goal
+            loss_total = (1-lamba) * loss_goal
 
             if self.model.head_div is not None:
                 if training_phase == 1:
@@ -80,7 +78,6 @@ class Trainer(object):
 
             if self.model.GeneralToken:
                 loss_ce_general = self.criterion_ce(out["general_logits"], labels)
-                #loss_neutral = self.nel(out["specific_token"],out["general_token"],labels)
 
             id_loss.update(loss_ce, 2 * input1.size()[0])
             tp_loss.update(loss_tp)
@@ -101,7 +98,6 @@ class Trainer(object):
 
                 if self.model.GeneralToken:
                     loss_ce_general += self.criterion_ce(out_r["general_logits"], labels_r)
-                    #loss_neutral += self.nel(out_r["specific_token"], out_r["general_token"], labels_r)
 
                 if self.model.KeyToken:
                     old_keys = out_r["old_keys"][domain-1] #1,embed_dim
@@ -123,7 +119,7 @@ class Trainer(object):
                     loss_kd = self.loss_kd_js(out_old["logits"][:add_num], out_r["logits"][:add_num])
                     tp_loss_r.update(loss_tr_r)
 
-                    loss_rehersal = (1- lamba) * loss_tr_r + lamba * loss_kd
+                    loss_rehersal = (1 - lamba) * loss_tr_r + lamba * loss_kd
 
                 if self.model.head_div is not None:
                     loss_ce_specific += self.criterion_ce(out_r["div_logits"],
@@ -136,8 +132,6 @@ class Trainer(object):
             if self.model.GeneralToken:
                 loss_total += 0.1 * loss_ce_general
                 losses_ce_general.update(loss_ce_general)
-                # loss_total += 0.1 * loss_neutral
-                # losses_neutral.update(loss_neutral)
 
             if self.model.KeyToken:
                 loss_total += 0.1 * pull_loss
@@ -160,7 +154,6 @@ class Trainer(object):
                       'Time {:.3f} ({:.3f})\t'
                       'Loss_goal {:.3f} ({:.3f})\t'
                       'Loss_id_div {:.3f}({:.3f})\t'
-                      'Loss_neutral {:.3f}({:.3f})\t'
                       'Loss_id_general {:.3f}({:.3f})\t'
                       'Loss_pull {:.3f}({:.3f})\t'
                       'Loss_total {:.3f} ({:.3f})\t'
@@ -169,7 +162,6 @@ class Trainer(object):
                               batch_time.val, batch_time.avg,
                               goal_loss.val, goal_loss.avg,
                               id_loss_specific.val, id_loss_specific.avg,
-                              losses_neutral.val, losses_neutral.avg,
                               losses_ce_general.val, losses_ce_general.avg,
                               losses_pull.val, losses_pull.avg,
                               losses_total.val, losses_total.avg,

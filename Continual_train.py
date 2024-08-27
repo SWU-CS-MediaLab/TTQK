@@ -8,7 +8,7 @@ from utils import *
 from model import TTQK
 from trainer import Trainer
 from eval_metrics import eval_func2
-from optimizer import adamw,sgd
+from optimizer import adamw
 from scheduler import create_scheduler
 from tensorboardX import SummaryWriter
 
@@ -104,11 +104,8 @@ def main_worker():
     test_loaders = [(gallary_loader_regdb,query_loader_regdb)]
 
     # optimizer
-    if args.optimizer == "sgd":
-        optimizer = sgd(args,net,1)
-    elif args.optimizer == "adam":
-        optimizer = adamw(args,net,1)
-        scheduler = create_scheduler(optimizer)
+    optimizer = adamw(args,net,1)
+    scheduler = create_scheduler(optimizer,1)
 
     #store the results of every stage
     all_cmc_perstage = collections.defaultdict(list)
@@ -120,11 +117,8 @@ def main_worker():
     color_pos, thermal_pos = GenIdx(dataset_regdb.train_color_label, dataset_regdb.train_thermal_label)
 
     for epoch in range(start_epoch,15):
-        if args.optimizer == "sgd":
-            current_lr = adjust_learning_rate(optimizer,epoch)
-        else:
-            scheduler.step(epoch)
-            current_lr = optimizer.param_groups[0]["lr"]
+        scheduler.step(epoch)
+        current_lr = optimizer.param_groups[0]["lr"]
 
         sampler = IdentitySampler(dataset_regdb.train_color_label,dataset_regdb.train_thermal_label,color_pos,thermal_pos,
                                   num_pos=args.num_pos,batchSize=args.batch_size)
@@ -209,11 +203,8 @@ def main_worker():
     test_loaders.append((gallary_loader_sysu,query_loader_sysu))
 
     #Re-initialize the optimizer
-    if args.optimizer == "sgd":
-        optimizer = sgd(args,net,2)
-    elif args.optimizer == "adam":
-        optimizer = adamw(args,net,2)
-        scheduler = create_scheduler(optimizer)
+    optimizer = adamw(args,net,2)
+    scheduler = create_scheduler(optimizer,2)
 
     vis_log_dir = osp.join(args.vis_logs_dir, suffix ,"stag2/")
     if not os.path.isdir(vis_log_dir):
@@ -224,11 +215,8 @@ def main_worker():
     trainer = Trainer(net)
     color_pos, thermal_pos = GenIdx(dataset_sysu.train_color_label, dataset_sysu.train_thermal_label)
     for epoch in range(start_epoch, 20):
-        if args.optimizer == "sgd":
-            current_lr = adjust_learning_rate(optimizer, epoch)
-        else:
-            scheduler.step(epoch)
-            current_lr = optimizer.param_groups[0]["lr"]
+        scheduler.step(epoch)
+        current_lr = optimizer.param_groups[0]["lr"]
 
         sampler = IdentitySampler(dataset_sysu.train_color_label, dataset_sysu.train_thermal_label, color_pos,
                                   thermal_pos, num_pos=args.num_pos, batchSize=args.batch_size)
@@ -328,11 +316,8 @@ def main_worker():
     test_loaders.append((gallary_loader_llcm, query_loader_llcm))
 
     # Re-initialize the optimizer
-    if args.optimizer == "sgd":
-        optimizer = sgd(args,net,3)
-    elif args.optimizer == "adam":
-        optimizer = adamw(args,net,3)
-        scheduler = create_scheduler(optimizer)
+    optimizer = adamw(args,net,3)
+    scheduler = create_scheduler(optimizer,3)
 
     vis_log_dir = osp.join(args.vis_logs_dir,suffix,"stag3/")
     if not os.path.isdir(vis_log_dir):
@@ -342,11 +327,8 @@ def main_worker():
     trainer = Trainer(net)
     color_pos, thermal_pos = GenIdx(dataset_llcm.train_color_label, dataset_llcm.train_thermal_label)
     for epoch in range(start_epoch, 20):
-        if args.optimizer == "sgd":
-            current_lr = adjust_learning_rate(optimizer, epoch)
-        else:
-            scheduler.step(epoch)
-            current_lr = optimizer.param_groups[0]["lr"]
+        scheduler.step(epoch)
+        current_lr = optimizer.param_groups[0]["lr"]
 
         sampler = IdentitySampler(dataset_llcm.train_color_label, dataset_llcm.train_thermal_label, color_pos,
                                   thermal_pos, num_pos=args.num_pos, batchSize=args.batch_size)
@@ -431,11 +413,8 @@ def main_worker():
     test_loaders.append((gallary_loader_vcm, query_loader_vcm))
 
     # Re-initialize the optimizer
-    if args.optimizer == "sgd":
-        optimizer = sgd(args,net,4)
-    elif args.optimizer == "adam":
-        optimizer = adamw(args,net,4)
-        scheduler = create_scheduler(optimizer)
+    optimizer = adamw(args,net,4)
+    scheduler = create_scheduler(optimizer,4)
 
     vis_log_dir = osp.join(args.vis_logs_dir,suffix, "stag4/")
     if not os.path.isdir(vis_log_dir):
@@ -445,11 +424,8 @@ def main_worker():
     trainer = Trainer(net)
     color_pos, thermal_pos = GenIdx(dataset_vcm.train_color_label, dataset_vcm.train_thermal_label)
     for epoch in range(start_epoch, 30):
-        if args.optimizer == "sgd":
-            current_lr = adjust_learning_rate(optimizer, epoch)
-        else:
-            scheduler.step(epoch)
-            current_lr = optimizer.param_groups[0]["lr"]
+        scheduler.step(epoch)
+        current_lr = optimizer.param_groups[0]["lr"]
 
         sampler = IdentitySampler(dataset_vcm.train_color_label, dataset_vcm.train_thermal_label, color_pos,
                                   thermal_pos, num_pos=args.num_pos, batchSize=args.batch_size)
@@ -504,25 +480,6 @@ def main_worker():
     },False,fpath = osp.join(save_model_dir,'last_stage_checkpoint.tar'))
 
 
-
-def adjust_learning_rate(optimizer, epoch):
-    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-    if epoch < 10:
-        lr = args.lr * (epoch + 1) / 10
-    elif epoch >= 10 and epoch < 20:
-        lr = args.lr
-    elif epoch >= 20 and epoch < 50:
-        lr = 0.1 * args.lr
-    elif epoch >= 50:
-        lr = args.lr * 0.01
-
-    optimizer.param_groups[0]['lr'] = 0.1 * lr
-    for i in range(len(optimizer.param_groups) - 1):
-        optimizer.param_groups[i + 1]['lr'] = lr
-
-    return lr
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Continual learning for VI-ReID")
     # data
@@ -546,11 +503,6 @@ if __name__ == "__main__":
     parser.add_argument('--optimizer',type = str,default="adam")
     parser.add_argument('--weight-decay', type=float, default=5e-4)
 
-    #SGD
-    parser.add_argument('--lr', type=float, default=0.1,
-                        help="learning rate of new parameters, for pretrained ")
-    parser.add_argument('--momentum', type=float, default=0.9)
-
     #Adam
     parser.add_argument('--base_lr', type=int, default=5e-4)
     parser.add_argument('--lr_pretrain', type=int, default=0.5)
@@ -560,14 +512,14 @@ if __name__ == "__main__":
     parser.add_argument('--resume', type=str, default='', metavar='PATH')
     parser.add_argument('--step',type = int,default = 0)
     parser.add_argument('--epochs', type=int, default=24)
-    parser.add_argument('--seed', type=int, default=4)
+    parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--print-freq', type=int, default=200)
     parser.add_argument('--margin', type=float, default=0.3, help='margin for the triplet loss with batch hard')
 
     # path
     working_dir = osp.dirname(osp.abspath(__file__))
     parser.add_argument('--data-dir', type=str, metavar='PATH',
-                        default=osp.join('/root/autodl-tmp/', ''))
+                        default=osp.join('/mnt/sda1/xyt/datasets/', ''))
     parser.add_argument('--logs-dir', type=str, metavar='PATH',
                         default=osp.join(working_dir, 'logs'))
     parser.add_argument('--save-model',type = str,default=osp.join(working_dir,'save_model'))
